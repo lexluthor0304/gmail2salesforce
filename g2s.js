@@ -657,7 +657,7 @@ function postTxtBodiesToSalesforce_(txtBodies, txtNames, config) {
 
   txtBodies.forEach((body, idx) => {
     const name = txtNames[idx] || `file-${idx + 1}.txt`;
-    const payload = mapTxtToSalesforcePayload_(name, body, config.salesforceSobject || DEFAULTS.salesforceSobject);
+    const payload = mapTxtToSalesforcePayload_(name, body, config.salesforceSobject || DEFAULTS.salesforceSobject, config.searchTimezone);
     try {
       const resp = UrlFetchApp.fetch(url, {
         method: 'post',
@@ -736,8 +736,8 @@ function fetchSalesforceAccessToken_(config) {
   };
 }
 
-function mapTxtToSalesforcePayload_(filename, rawText, sobjectName) {
-  const parsed = parseTxtRequest_(rawText);
+function mapTxtToSalesforcePayload_(filename, rawText, sobjectName, timezone) {
+  const parsed = parseTxtRequest_(rawText, timezone);
   const comments = [
     parsed.product ? `商品: ${parsed.product}` : '',
     parsed.bodyType ? `ボディタイプ: ${parsed.bodyType}` : '',
@@ -746,8 +746,7 @@ function mapTxtToSalesforcePayload_(filename, rawText, sobjectName) {
 
   return {
     attributes: { type: sobjectName || 'Mail2X__c' },
-    Name: filename,
-    RequestDate__c: parsed.requestDate,
+    RequestDate__c: parsed.requestDateIso || parsed.requestDate,
     AssessmentNumber__c: parsed.assessmentNumber,
     comment__c: comments || undefined,
     maker__c: parsed.brand,
@@ -762,7 +761,6 @@ function mapTxtToSalesforcePayload_(filename, rawText, sobjectName) {
     DriveType__c: parsed.driveType,
     Displacement__c: parsed.displacement,
     mileage__c: parsed.mileage,
-    InspectionDeadline__c: parsed.inspectionDeadline,
     accident_history__c: parsed.accidentHistory,
     desired_time_to_sell__c: parsed.desiredSellTiming,
     Model__c: parsed.modelCode,
@@ -781,13 +779,14 @@ function mapTxtToSalesforcePayload_(filename, rawText, sobjectName) {
   };
 }
 
-function parseTxtRequest_(rawText) {
+function parseTxtRequest_(rawText, timezone) {
   const normalized = (rawText || '').replace(/\r/g, '');
   const valueFor = (label) => extractLabelValue_(normalized, label);
 
   const reqMatch = normalized.match(/査定依頼日時・査定依頼番号][\s\S]*?([0-9]{4}年\d{1,2}月\d{1,2}日[^(\n（]*)[（(]([0-9]+)[)）]/);
   const requestDate = reqMatch ? reqMatch[1].trim() : '';
   const assessmentNumber = reqMatch ? reqMatch[2].trim() : '';
+  const requestDateIso = requestDate ? parseJapaneseDateTimeToIsoUtc_(requestDate, timezone) : '';
   const product = valueFor('商品');
 
   const brand = valueFor('ブランド名');
@@ -823,6 +822,7 @@ function parseTxtRequest_(rawText) {
 
   return {
     requestDate,
+    requestDateIso,
     assessmentNumber,
     product,
     brand,
@@ -879,6 +879,27 @@ function splitJapaneseAddress_(full) {
   }
 
   return { state: '', city: '', address: value };
+}
+
+function parseJapaneseDateTimeToIsoUtc_(raw, timezone) {
+  const tz = (timezone || DEFAULTS.searchTimezone || 'Asia/Tokyo').trim();
+  const m = raw.match(/(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日\s*(\d{1,2})時\s*(\d{1,2})分/);
+  if (!m) return '';
+  const [_, y, mo, d, h, mi] = m;
+  const yyyy = Number(y);
+  const month = Number(mo);
+  const day = Number(d);
+  const hour = Number(h);
+  const minute = Number(mi);
+  const pad = (n) => (n < 10 ? `0${n}` : String(n));
+
+  const probe = new Date(`${yyyy}-${pad(month)}-${pad(day)}T00:00:00Z`);
+  const offsetRaw = Utilities.formatDate(probe, tz, 'Z'); // e.g. +0900
+  const offset = (offsetRaw && offsetRaw.length === 5) ? `${offsetRaw.slice(0, 3)}:${offsetRaw.slice(3)}` : '+00:00';
+  const isoLocal = `${yyyy}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00${offset}`;
+  const asDate = new Date(isoLocal);
+  if (isNaN(asDate.getTime())) return '';
+  return Utilities.formatDate(asDate, 'UTC', "yyyy-MM-dd'T'HH:mm:ss'Z'");
 }
 
 /** ────────────────────────────────────────────────
