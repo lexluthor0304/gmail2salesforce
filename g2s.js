@@ -703,9 +703,14 @@ function fetchSalesforceAccessToken_(config) {
     password: config.salesforcePassword
   };
 
+  const urlEncodedPayload = Object.keys(payload)
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(payload[k])}`)
+    .join('&');
+
   const resp = UrlFetchApp.fetch(tokenUrl, {
     method: 'post',
-    payload,
+    contentType: 'application/x-www-form-urlencoded',
+    payload: urlEncodedPayload,
     muteHttpExceptions: true
   });
 
@@ -713,7 +718,8 @@ function fetchSalesforceAccessToken_(config) {
   const text = resp.getContentText();
   console.info(`🔑 Salesforce login response status=${status}`);
   if (status < 200 || status >= 300) {
-    throw new Error(`Salesforce token request failed: status=${status} body=${text}`);
+    const errHint = buildSalesforceGrantHint_(text);
+    throw new Error(`Salesforce token request failed: status=${status} body=${text}${errHint}`);
   }
 
   let parsed = null;
@@ -734,6 +740,19 @@ function fetchSalesforceAccessToken_(config) {
     accessToken: parsed.access_token,
     instanceUrl: resolvedInstance
   };
+}
+
+function buildSalesforceGrantHint_(rawBody) {
+  if (!rawBody) return '';
+  try {
+    const parsed = JSON.parse(rawBody);
+    if (parsed.error === 'invalid_grant') {
+      return ' (invalid_grant: check username/password/security token combination, IP restrictions, and login URL vs instance type)';
+    }
+  } catch (_) {
+    // ignore parse failure
+  }
+  return '';
 }
 
 function mapTxtToSalesforcePayload_(filename, rawText, sobjectName, timezone) {
@@ -781,44 +800,51 @@ function mapTxtToSalesforcePayload_(filename, rawText, sobjectName, timezone) {
 
 function parseTxtRequest_(rawText, timezone) {
   const normalized = (rawText || '').replace(/\r/g, '');
-  const valueFor = (label) => extractLabelValue_(normalized, label);
+  const valueFor = (labels) => extractLabelValue_(normalized, labels);
+  const labelSet = (label, extras) => labelAliases_(label, extras);
 
   const reqMatch = normalized.match(/査定依頼日時・査定依頼番号][\s\S]*?([0-9]{4}年\d{1,2}月\d{1,2}日[^(\n（]*)[（(]([0-9]+)[)）]/);
   const requestDate = reqMatch ? reqMatch[1].trim() : '';
   const assessmentNumber = reqMatch ? reqMatch[2].trim() : '';
   const requestDateIso = requestDate ? parseJapaneseDateTimeToIsoUtc_(requestDate, timezone) : '';
-  const product = valueFor('商品');
+  const product = valueFor(labelSet('商品'));
 
-  const brand = valueFor('ブランド名');
-  const carModel = valueFor('車種名');
-  const modelYear = valueFor('年式');
-  const grade = valueFor('グレード');
-  const bodyType = valueFor('ボディタイプ');
-  const bodyColor = valueFor('色');
-  const doorCount = valueFor('ドア数');
-  const handle = valueFor('ハンドル');
-  const fuel = valueFor('燃料');
-  const transmission = valueFor('ミッション');
-  const driveType = valueFor('駆動方式');
-  const displacement = valueFor('排気量');
-  const mileage = valueFor('走行距離');
-  const inspectionDeadline = valueFor('車検時期');
-  const accidentHistory = valueFor('事故歴');
-  const carCondition = valueFor('クルマの状態');
-  const desiredSellTiming = valueFor('売却希望時期');
-  const modelCode = valueFor('型式');
-  const equipmentInfo = valueFor('装備');
-  const otherOptions = valueFor('その他オプション等');
+  const brand = valueFor(labelSet('ブランド名', ['メーカー', 'メーカー名']));
+  const carModel = valueFor(labelSet('車種名', ['車名']));
+  const modelYear = valueFor(labelSet('年式'));
+  const grade = valueFor(labelSet('グレード'));
+  const bodyType = valueFor(labelSet('ボディタイプ', ['ボディタイプ・カテゴリ', 'ボディタイプカテゴリ']));
+  const compositeBodyAndDoorRaw = valueFor(['車体色・ドア数', '車体色/ドア数', '車体色･ドア数']);
+  const standaloneBodyColor = valueFor(labelSet('色', ['車体色', 'ボディカラー', 'カラー']));
+  const standaloneDoorCount = valueFor(labelSet('ドア数'));
+  const compositeBodyAndDoor = splitBodyColorAndDoor_(compositeBodyAndDoorRaw);
+  const bodyColor = standaloneBodyColor || compositeBodyAndDoor.bodyColor;
+  const doorCount = standaloneDoorCount || compositeBodyAndDoor.doorCount;
+  const handle = valueFor(labelSet('ハンドル'));
+  const fuel = valueFor(labelSet('燃料'));
+  const transmission = valueFor(labelSet('ミッション', ['トランスミッション']));
+  const driveType = valueFor(labelSet('駆動方式', ['駆動']));
+  const displacement = valueFor(labelSet('排気量'));
+  const mileage = valueFor(labelSet('走行距離'));
+  const inspectionDeadline = valueFor(labelSet('車検時期', ['車検満了日']));
+  const accidentHistory = valueFor(labelSet('事故歴'));
+  const carCondition = valueFor(labelSet('クルマの状態', ['車の状態']));
+  const desiredSellTiming = valueFor(labelSet('売却希望時期', ['売却希望時期目安', '売却希望時期・目安']));
+  const compositeModelEquipRaw = valueFor(['型式・装備', '型式/装備', '型式･装備']);
+  const compositeModelEquip = splitModelAndEquipment_(compositeModelEquipRaw);
+  const modelCode = valueFor(labelSet('型式')) || compositeModelEquip.modelCode;
+  const equipmentInfo = valueFor(labelSet('装備')) || compositeModelEquip.equipmentInfo;
+  const otherOptions = valueFor(labelSet('その他オプション等', ['その他オプション', 'その他装備']));
 
-  const customerName = valueFor('ご依頼者名').replace(/様$/, '');
-  const customerKana = valueFor('ご依頼者カナ名').replace(/様$/, '');
-  const postalCode = valueFor('郵便番号');
-  const addressFull = valueFor('ご住所');
+  const customerName = valueFor(labelSet('ご依頼者名', ['氏名'])).replace(/様$/, '');
+  const customerKana = valueFor(labelSet('ご依頼者カナ名')).replace(/様$/, '');
+  const postalCode = valueFor(labelSet('郵便番号'));
+  const addressFull = valueFor(labelSet('ご住所', ['住所']));
   const addressParts = splitJapaneseAddress_(addressFull);
-  const email = valueFor('メールアドレス');
-  const phone = valueFor('電話番号');
-  const phone2 = valueFor('その他の連絡先');
-  const contactTime = valueFor('連絡可能時間帯');
+  const email = valueFor(labelSet('メールアドレス'));
+  const phone = valueFor(labelSet('電話番号'));
+  const phone2 = valueFor(labelSet('その他の連絡先', ['サブ連絡先']));
+  const contactTime = valueFor(labelSet('連絡可能時間帯', ['連絡希望時間帯']));
 
   return {
     requestDate,
@@ -858,11 +884,77 @@ function parseTxtRequest_(rawText, timezone) {
   };
 }
 
-function extractLabelValue_(text, label) {
-  if (!text || !label) return '';
-  const re = new RegExp('[\\n\\r^][\\u30fb・\\u2022\\s　]*' + label + '\\s*[:：]\\s*([^\\n\\r]+)', 'i');
-  const m = text.match(re);
-  return m ? m[1].trim() : '';
+function extractLabelValue_(text, labels) {
+  if (!text || !labels) return '';
+  const labelList = Array.isArray(labels) ? labels : [labels];
+  for (const label of labelList) {
+    if (!label) continue;
+    const escaped = escapeRegex_(label);
+    const re = new RegExp('(?:^|[\\n\\r])[\\u30fb・\\u2022\\s　]*' + escaped + '\\s*[:：]\\s*([^\\n\\r]+)', 'i');
+    const m = text.match(re);
+    if (m) {
+      return cleanupLabelValue_(m[1]);
+    }
+  }
+  return '';
+}
+
+function cleanupLabelValue_(value) {
+  return (value || '').replace(/・?ラベル$/i, '').trim();
+}
+
+function labelAliases_(label, extras) {
+  const addon = extras || [];
+  return [label, `${label}・ラベル`, `${label}ラベル`, ...addon];
+}
+
+function splitBodyColorAndDoor_(raw) {
+  const cleaned = cleanupLabelValue_(raw);
+  if (!cleaned) return { bodyColor: '', doorCount: '' };
+
+  const normalizedDigits = normalizeZenkakuDigits_(cleaned);
+  const doorMatch = normalizedDigits.match(/([0-9]+)\s*(?:ドア|Ｄ|D(?:oor)?|DOOR)?/i);
+  const separatorParts = cleaned.split(/[／/|｜・･、,]/).map(p => cleanupLabelValue_(p)).filter(Boolean);
+
+  const bodyColor = doorMatch ? trimTrailingSeparators_(cleanupLabelValue_(cleaned.slice(0, doorMatch.index))) || cleanupLabelValue_(cleaned.slice(doorMatch.index + doorMatch[0].length)) : '';
+  const doorCount = doorMatch ? extractDoorDigits_(doorMatch[1]) : '';
+
+  const fallbackBodyColor = separatorParts.length ? separatorParts[0] : '';
+  const fallbackDoorSegment = separatorParts.length > 1 ? separatorParts.slice(1).find(p => /ドア|door/i.test(p)) || separatorParts[1] : '';
+  const fallbackDoorCount = extractDoorDigits_(fallbackDoorSegment);
+
+  return {
+    bodyColor: bodyColor || fallbackBodyColor,
+    doorCount: doorCount || fallbackDoorCount
+  };
+}
+
+function splitModelAndEquipment_(raw) {
+  const cleaned = cleanupLabelValue_(raw);
+  if (!cleaned) return { modelCode: '', equipmentInfo: '' };
+  const parts = cleaned.split(/[／/|｜・･、,，]/).map(p => cleanupLabelValue_(p)).filter(Boolean);
+  if (parts.length >= 2) {
+    return { modelCode: parts[0], equipmentInfo: parts.slice(1).join('/') };
+  }
+  return { modelCode: parts[0] || cleaned, equipmentInfo: '' };
+}
+
+function normalizeZenkakuDigits_(value) {
+  return (value || '').replace(/[０-９]/g, (d) => String('０１２３４５６７８９'.indexOf(d)));
+}
+
+function extractDoorDigits_(value) {
+  const normalized = normalizeZenkakuDigits_(value);
+  const m = normalized.match(/([0-9]+)/);
+  return m ? m[1] : '';
+}
+
+function escapeRegex_(raw) {
+  return (raw || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function trimTrailingSeparators_(value) {
+  return (value || '').replace(/[／/|｜・･、,]+$/, '').trim();
 }
 
 function splitJapaneseAddress_(full) {
