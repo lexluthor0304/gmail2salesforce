@@ -803,7 +803,7 @@ function parseTxtRequest_(rawText, timezone) {
   const valueFor = (labels) => extractLabelValue_(normalized, labels);
   const labelSet = (label, extras) => labelAliases_(label, extras);
 
-  const reqMatch = normalized.match(/査定依頼日時・査定依頼番号][\s\S]*?([0-9]{4}年\d{1,2}月\d{1,2}日[^(\n（]*)[（(]([0-9]+)[)）]/);
+  const reqMatch = normalized.match(/査定依頼日時・査定依頼番号[】\]][\s\r\n　]*([0-9]{4}年\d{1,2}月\d{1,2}日[^\n\r（(]*)[（(]([0-9]+)[)）]/);
   const requestDate = reqMatch ? reqMatch[1].trim() : '';
   const assessmentNumber = reqMatch ? reqMatch[2].trim() : '';
   const requestDateIso = requestDate ? parseJapaneseDateTimeToIsoUtc_(requestDate, timezone) : '';
@@ -836,8 +836,8 @@ function parseTxtRequest_(rawText, timezone) {
   const equipmentInfo = valueFor(labelSet('装備')) || compositeModelEquip.equipmentInfo;
   const otherOptions = valueFor(labelSet('その他オプション等', ['その他オプション', 'その他装備']));
 
-  const customerName = valueFor(labelSet('ご依頼者名', ['氏名'])).replace(/様$/, '');
-  const customerKana = valueFor(labelSet('ご依頼者カナ名')).replace(/様$/, '');
+  const customerName = valueFor(labelSet('ご依頼者名', ['氏名'])).replace(/様$/, '').trim();
+  const customerKana = valueFor(labelSet('ご依頼者カナ名')).replace(/様$/, '').trim();
   const postalCode = valueFor(labelSet('郵便番号'));
   const addressFull = valueFor(labelSet('ご住所', ['住所']));
   const addressParts = splitJapaneseAddress_(addressFull);
@@ -890,7 +890,7 @@ function extractLabelValue_(text, labels) {
   for (const label of labelList) {
     if (!label) continue;
     const escaped = escapeRegex_(label);
-    const re = new RegExp('(?:^|[\\n\\r])[\\u30fb・\\u2022\\s　]*' + escaped + '\\s*[:：]\\s*([^\\n\\r]+)', 'i');
+    const re = new RegExp('(?:^|[\\n\\r])[\\u30fb・\\u2022\\s　]*' + escaped + '[ \\t　]*[:：][ \\t　]*([^\\n\\r]*)', 'i');
     const m = text.match(re);
     if (m) {
       return cleanupLabelValue_(m[1]);

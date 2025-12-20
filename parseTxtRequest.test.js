@@ -133,3 +133,78 @@ assert.strictEqual(parsed.customerKana, 'ヤマダタロウ');
 assert.strictEqual(parsed.requestDateIso, "2024-05-01T01:30:00Z");
 
 console.log('parseTxtRequest_ sample parsing ✅');
+
+const latestTemplateTxt = `
+【査定依頼日時・査定依頼番号】
+　2025年12月20日 19時24分(2025122002839)
+・商品：PC
+
+【依頼車両情報】
+・ブランド名：  ジープ
+・車種名：      ラングラー
+・年式：        平成30(2018)年式
+・グレード：    アンリミテッド アルティチュード 4WD
+・ボディタイプ：クロカン・ＳＵＶ
+・色：          
+・ドア数：      5ドア
+・ハンドル：    右ハンドル
+・燃料：        ガソリン
+・ミッション：  オートマ
+・駆動方式：    4WD
+・排気量：      3600 cc
+・走行距離：    55,001〜60,000km
+・車検時期：    
+・事故歴：      なし
+・クルマの状態：
+・売却希望時期：
+・型式：        
+・装備：        
+・その他オプション等：
+
+
+【依頼者】
+・ご依頼者名：    佐藤京史朗 様
+・ご依頼者カナ名：サトウキョウシロウ 様
+・郵便番号：      461-0003
+・ご住所：        愛知県名古屋市東区
+・メールアドレス：kyontama1019@icloud.com
+・電話番号：      080-1579-1238
+・その他の連絡先：
+・連絡可能時間帯：`;
+
+const parsedLatest = parseTxtRequest_(latestTemplateTxt, 'Asia/Tokyo');
+assert.strictEqual(parsedLatest.assessmentNumber, '2025122002839');
+assert.strictEqual(parsedLatest.requestDate, '2025年12月20日 19時24分');
+assert.strictEqual(parsedLatest.requestDateIso, '2025-12-20T10:24:00Z');
+assert.strictEqual(parsedLatest.product, 'PC');
+assert.strictEqual(parsedLatest.brand, 'ジープ');
+assert.strictEqual(parsedLatest.carModel, 'ラングラー');
+assert.strictEqual(parsedLatest.grade, 'アンリミテッド アルティチュード 4WD');
+assert.strictEqual(parsedLatest.bodyType, 'クロカン・ＳＵＶ');
+assert.strictEqual(parsedLatest.bodyColor, '');
+assert.strictEqual(parsedLatest.doorCount, '5ドア');
+assert.strictEqual(parsedLatest.handle, '右ハンドル');
+assert.strictEqual(parsedLatest.fuel, 'ガソリン');
+assert.strictEqual(parsedLatest.transmission, 'オートマ');
+assert.strictEqual(parsedLatest.driveType, '4WD');
+assert.strictEqual(parsedLatest.displacement, '3600 cc');
+assert.strictEqual(parsedLatest.mileage, '55,001〜60,000km');
+assert.strictEqual(parsedLatest.inspectionDeadline, '');
+assert.strictEqual(parsedLatest.accidentHistory, 'なし');
+assert.strictEqual(parsedLatest.carCondition, '');
+assert.strictEqual(parsedLatest.desiredSellTiming, '');
+assert.strictEqual(parsedLatest.modelCode, '');
+assert.strictEqual(parsedLatest.equipmentInfo, '');
+assert.strictEqual(parsedLatest.otherOptions, '');
+assert.strictEqual(parsedLatest.customerName, '佐藤京史朗');
+assert.strictEqual(parsedLatest.customerKana, 'サトウキョウシロウ');
+assert.strictEqual(parsedLatest.postalCode, '461-0003');
+assert.strictEqual(parsedLatest.state, '愛知県');
+assert.strictEqual(parsedLatest.city, '名古屋市');
+assert.strictEqual(parsedLatest.addressLine, '東区');
+assert.strictEqual(parsedLatest.email, 'kyontama1019@icloud.com');
+assert.strictEqual(parsedLatest.phone, '080-1579-1238');
+assert.strictEqual(parsedLatest.phone2, '');
+assert.strictEqual(parsedLatest.contactTime, '');
+
+console.log('parseTxtRequest_ latest template parsing ✅');
