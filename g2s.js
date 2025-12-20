@@ -703,9 +703,14 @@ function fetchSalesforceAccessToken_(config) {
     password: config.salesforcePassword
   };
 
+  const urlEncodedPayload = Object.keys(payload)
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(payload[k])}`)
+    .join('&');
+
   const resp = UrlFetchApp.fetch(tokenUrl, {
     method: 'post',
-    payload,
+    contentType: 'application/x-www-form-urlencoded',
+    payload: urlEncodedPayload,
     muteHttpExceptions: true
   });
 
@@ -713,7 +718,8 @@ function fetchSalesforceAccessToken_(config) {
   const text = resp.getContentText();
   console.info(`🔑 Salesforce login response status=${status}`);
   if (status < 200 || status >= 300) {
-    throw new Error(`Salesforce token request failed: status=${status} body=${text}`);
+    const errHint = buildSalesforceGrantHint_(text);
+    throw new Error(`Salesforce token request failed: status=${status} body=${text}${errHint}`);
   }
 
   let parsed = null;
@@ -734,6 +740,19 @@ function fetchSalesforceAccessToken_(config) {
     accessToken: parsed.access_token,
     instanceUrl: resolvedInstance
   };
+}
+
+function buildSalesforceGrantHint_(rawBody) {
+  if (!rawBody) return '';
+  try {
+    const parsed = JSON.parse(rawBody);
+    if (parsed.error === 'invalid_grant') {
+      return ' (invalid_grant: check username/password/security token combination, IP restrictions, and login URL vs instance type)';
+    }
+  } catch (_) {
+    // ignore parse failure
+  }
+  return '';
 }
 
 function mapTxtToSalesforcePayload_(filename, rawText, sobjectName, timezone) {
