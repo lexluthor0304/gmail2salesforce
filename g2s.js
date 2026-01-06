@@ -794,7 +794,8 @@ function mapTxtToSalesforcePayload_(filename, rawText, sobjectName, timezone) {
     mail__c: parsed.email,
     Phone__c: parsed.phone,
     Phone2__c: parsed.phone2,
-    preferred_contact_time__c: parsed.contactTime
+    preferred_contact_time__c: parsed.contactTime,
+    LeadSource__c: 'カーセンサー,'
   };
 }
 
