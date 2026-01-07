@@ -962,7 +962,7 @@ function splitJapaneseAddress_(full) {
   const value = (full || '').trim();
   if (!value) return { state: '', city: '', address: '' };
 
-  const m = value.match(/^(.+?[都道府県])(.+?[市区町村郡])?(.*)$/);
+  const m = value.match(/^(.+?[都道府県])((?:.+?市.+?区|.+?[市区町村郡]))?(.*)$/);
   if (m) {
     return {
       state: (m[1] || '').trim(),
