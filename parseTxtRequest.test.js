@@ -131,6 +131,7 @@ assert.strictEqual(parsed.otherOptions, 'サンルーフ');
 assert.strictEqual(parsed.customerName, '山田太郎');
 assert.strictEqual(parsed.customerKana, 'ヤマダタロウ');
 assert.strictEqual(parsed.requestDateIso, "2024-05-01T01:30:00Z");
+assert.strictEqual(parsed.addressFull, '東京都渋谷区1-2-3');
 
 console.log('parseTxtRequest_ sample parsing ✅');
 
@@ -202,6 +203,7 @@ assert.strictEqual(parsedLatest.postalCode, '461-0003');
 assert.strictEqual(parsedLatest.state, '愛知県');
 assert.strictEqual(parsedLatest.city, '名古屋市');
 assert.strictEqual(parsedLatest.addressLine, '東区');
+assert.strictEqual(parsedLatest.addressFull, '愛知県名古屋市東区');
 assert.strictEqual(parsedLatest.email, 'kyontama1019@icloud.com');
 assert.strictEqual(parsedLatest.phone, '080-1579-1238');
 assert.strictEqual(parsedLatest.phone2, '');
